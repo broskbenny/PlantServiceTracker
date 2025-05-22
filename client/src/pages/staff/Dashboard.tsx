@@ -1,0 +1,765 @@
+import { useQuery } from "@tanstack/react-query";
+import { queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useRef, useState } from "react";
+import { formatDate, addDays, startOfDay, isSameDay, isWithinInterval, endOfWeek, addWeeks, endOfMonth, addMonths } from "@/lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import { Loader2, Calendar, List, CalendarIcon, MapPin, Phone, X, ChevronDown, Check } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { ExpandableJobItem } from "@/components/ExpandableJobItem";
+import { Button } from "@/components/ui/button";
+import { useViewMode } from "@/lib/viewModeContext";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogClose
+} from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { StatusIndicator } from "@/components/StatusIndicator";
+
+export default function StaffDashboard() {
+  const { user } = useAuth();
+  const { viewMode, setViewMode } = useViewMode();
+  const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const expandedJobRef = useRef<HTMLDivElement>(null);
+  
+  // Get today and base dates for categorization
+  const today = startOfDay(new Date());
+  const tomorrow = addDays(today, 1);
+  const endOfThisWeek = endOfWeek(today);
+  const endOfNextWeek = endOfWeek(addWeeks(today, 1));
+  const endOfThisMonth = endOfMonth(today);
+  const endOfNextMonth = endOfMonth(addMonths(today, 1));
+  
+  // Make sure we have the token for authorization
+  const token = localStorage.getItem('token');
+  
+  // Fetch all jobs with manual authentication
+  const { data: allJobs, isLoading } = useQuery({
+    queryKey: ["/api/jobs"],
+    enabled: !!token, // Only run query if token exists
+    retry: 3,
+    retryDelay: 1000,
+    // Add auth headers manually to ensure token is used properly
+    queryFn: async () => {
+      const response = await fetch("/api/jobs", {
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch jobs");
+      }
+      return response.json();
+    }
+  });
+  
+  // Use imported queryClient from lib
+  const { toast } = useToast();
+  
+  // Function to mark all jobs for a particular day as complete
+  const markAllDayJobsComplete = async (dayJobs: any[]) => {
+    if (!dayJobs || dayJobs.length === 0) return;
+    
+    try {
+      // Process each job sequentially
+      for (const job of dayJobs) {
+        if (job.status === "completed") continue;
+        
+        // First mark all service points as completed
+        const pointPromises = job.servicePoints.map((point: any) => {
+          if (point.status !== "completed") {
+            return fetch(`/api/service-points/${point.id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+              },
+              body: JSON.stringify({ status: "completed" })
+            });
+          }
+          return Promise.resolve();
+        });
+        
+        await Promise.all(pointPromises);
+        
+        // Then mark the job itself as completed
+        await fetch(`/api/jobs/${job.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: JSON.stringify({ status: "completed" })
+        });
+      }
+      
+      // Refresh the data
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs"] });
+      
+      toast({
+        title: "Success",
+        description: `Marked ${dayJobs.length} jobs as complete`,
+      });
+    } catch (error) {
+      console.error("Error marking jobs complete:", error);
+      toast({
+        title: "Error",
+        description: "Failed to mark jobs as complete",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Filter jobs assigned to current user (ensure allJobs is an array)
+  const myJobs = (Array.isArray(allJobs) && user) ? 
+    allJobs.filter((job: any) => job.assignedToId === user.id) : 
+    [];
+  
+  // Function to categorize jobs by date
+  const categorizeJobs = () => {
+    if (!myJobs || !myJobs.length) return {
+      today: [],
+      tomorrow: [],
+      thisWeek: [],
+      nextWeek: [],
+      thisMonth: [],
+      nextMonth: [],
+      future: [],
+    };
+    
+    const categorized = {
+      today: [] as any[],
+      tomorrow: [] as any[],
+      thisWeek: [] as any[],
+      nextWeek: [] as any[],
+      thisMonth: [] as any[],
+      nextMonth: [] as any[],
+      future: [] as any[],
+    };
+    
+    myJobs.forEach((job: any) => {
+      const jobDate = startOfDay(new Date(job.date));
+      
+      if (isSameDay(jobDate, today)) {
+        categorized.today.push(job);
+      } else if (isSameDay(jobDate, tomorrow)) {
+        categorized.tomorrow.push(job);
+      } else if (isWithinInterval(jobDate, { start: addDays(tomorrow, 1), end: endOfThisWeek })) {
+        categorized.thisWeek.push(job);
+      } else if (isWithinInterval(jobDate, { start: addDays(endOfThisWeek, 1), end: endOfNextWeek })) {
+        categorized.nextWeek.push(job);
+      } else if (isWithinInterval(jobDate, { start: addDays(endOfNextWeek, 1), end: endOfThisMonth })) {
+        categorized.thisMonth.push(job);
+      } else if (isWithinInterval(jobDate, { start: addDays(endOfThisMonth, 1), end: endOfNextMonth })) {
+        categorized.nextMonth.push(job);
+      } else {
+        categorized.future.push(job);
+      }
+    });
+    
+    // Sort jobs by date within each category
+    Object.keys(categorized).forEach((key) => {
+      categorized[key as keyof typeof categorized].sort((a: any, b: any) => 
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+    });
+    
+    return categorized;
+  };
+  
+  const categorizedJobs = categorizeJobs();
+
+  // Function to generate calendar data
+  const getCalendarData = () => {
+    if (!myJobs) return [];
+    
+    // Get current month dates
+    const currentDate = new Date();
+    const firstDay = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
+    const lastDay = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+    
+    // Calculate the first date to display (including padding days from previous month)
+    // Get the day of the week of the first day (0 = Sunday, 1 = Monday, etc.)
+    const firstDayOfWeek = firstDay.getDay();
+    // Calculate how many days to go back to find Monday
+    // If Sunday (0), go back 6 days; if Monday (1), go back 0 days, etc.
+    const daysToSubtract = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
+    let calendarStart = new Date(firstDay);
+    calendarStart.setDate(firstDay.getDate() - daysToSubtract);
+    
+    // Calculate the last date to display (including padding days from next month)
+    const lastDayOfWeek = lastDay.getDay();
+    // Calculate how many days to add to include Sunday
+    // If Sunday (0), add 0 days; if Monday (1), add 6 days, etc.
+    const daysToAdd = lastDayOfWeek === 0 ? 0 : 7 - lastDayOfWeek;
+    let calendarEnd = new Date(lastDay);
+    calendarEnd.setDate(lastDay.getDate() + daysToAdd);
+    
+    // Create date array for display
+    const dates = [];
+    let currentCheckDate = new Date(calendarStart);
+    
+    // Add all dates for the calendar display
+    while (currentCheckDate <= calendarEnd) {
+      const dateStr = currentCheckDate.toISOString().split('T')[0];
+      const jobsOnDate = myJobs.filter((job: any) => 
+        job.date.split('T')[0] === dateStr
+      );
+      
+      dates.push({
+        date: new Date(currentCheckDate),
+        jobs: jobsOnDate,
+        isCurrentMonth: currentCheckDate.getMonth() === currentDate.getMonth()
+      });
+      
+      currentCheckDate = addDays(currentCheckDate, 1);
+    }
+    
+    return dates;
+  };
+
+  return (
+    <div className="p-0 sm:p-4 max-w-4xl mx-auto">
+      <div className="mb-6">
+        {/* View toggle now moved to header */}
+      </div>
+      
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+          <p className="text-muted-foreground">Loading your assignments...</p>
+        </div>
+      ) : !myJobs || myJobs.length === 0 ? (
+        <Card className="p-8 text-center">
+          <h3 className="font-medium text-lg mb-2">No Assignments</h3>
+          <p className="text-muted-foreground">
+            You don't have any jobs assigned to you
+          </p>
+        </Card>
+      ) : (
+        <div>
+          {viewMode === "list" && (
+            <div className="space-y-8">
+              {/* Today's Jobs */}
+              {categorizedJobs.today && categorizedJobs.today.length > 0 && (
+                <Collapsible defaultOpen={true} className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center flex-1 justify-between">
+                      <h2 className="text-xl font-medium">
+                        {formatDate(today, "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(Today)</span>
+                      </h2>
+                      
+                      <div className="flex items-center space-x-2">
+                        <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform" />
+                        {/* Date header status indicator for Today */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.today.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.today.some((job: any) => job.status === "completed" || 
+                                job.servicePoints?.some((sp: any) => sp.status === "completed")) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                        />
+                      </div>
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all jobs for today as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.today);
+                      }}
+                      title="Mark all jobs for today as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.today.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              
+              {/* Tomorrow's Jobs */}
+              {categorizedJobs.tomorrow && categorizedJobs.tomorrow.length > 0 && (
+                <Collapsible className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center justify-between flex-1">
+                      <h2 className="text-xl font-medium">
+                        {formatDate(tomorrow, "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(Tomorrow)</span>
+                      </h2>
+                      <div className="flex items-center space-x-2">
+                        <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform" />
+                        {/* Date header status indicator for Tomorrow */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.tomorrow.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.tomorrow.some((job: any) => job.status === "completed" || 
+                                job.servicePoints?.some((sp: any) => sp.status === "completed")) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                        />
+                      </div>
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all jobs for tomorrow as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.tomorrow);
+                      }}
+                      title="Mark all jobs for tomorrow as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.tomorrow.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              
+              {/* This Week's Jobs */}
+              {categorizedJobs.thisWeek && categorizedJobs.thisWeek.length > 0 && (
+                <Collapsible className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center justify-between flex-1">
+                      <h2 className="text-xl font-medium">
+                        {formatDate(addDays(tomorrow, 1), "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(This Week)</span>
+                      </h2>
+                      <div className="flex items-center space-x-2">
+                        <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform" />
+                        {/* Date header status indicator for This Week */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.thisWeek.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.thisWeek.some((job: any) => 
+                                  job.status === "completed" || job.status === "in_progress" || 
+                                  (Array.isArray(job.servicePoints) && job.servicePoints.some((sp: any) => sp.status === "completed"))
+                                ) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                        />
+                      </div>
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all jobs for this week as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.thisWeek);
+                      }}
+                      title="Mark all jobs for this week as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.thisWeek.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              
+              {/* Next Week's Jobs */}
+              {categorizedJobs.nextWeek && categorizedJobs.nextWeek.length > 0 && (
+                <Collapsible className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center flex-1">
+                      <div className="flex items-center">
+                        {/* Date header status indicator for Next Week */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.nextWeek.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.nextWeek.some((job: any) => 
+                                  job.status === "completed" || job.status === "in_progress" || 
+                                  (Array.isArray(job.servicePoints) && job.servicePoints.some((sp: any) => sp.status === "completed"))
+                                ) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                          className="mr-3"
+                        />
+                        <h2 className="text-xl font-medium">
+                          {formatDate(addDays(endOfThisWeek, 1), "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(Next Week)</span>
+                        </h2>
+                      </div>
+                      <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform ml-2" />
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all jobs for next week as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.nextWeek);
+                      }}
+                      title="Mark all jobs for next week as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.nextWeek.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              
+              {/* This Month's Jobs */}
+              {categorizedJobs.thisMonth && categorizedJobs.thisMonth.length > 0 && (
+                <Collapsible className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center flex-1">
+                      <div className="flex items-center">
+                        {/* Date header status indicator for This Month */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.thisMonth.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.thisMonth.some((job: any) => 
+                                  job.status === "completed" || job.status === "in_progress" || 
+                                  (Array.isArray(job.servicePoints) && job.servicePoints.some((sp: any) => sp.status === "completed"))
+                                ) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                          className="mr-3"
+                        />
+                        <h2 className="text-xl font-medium">
+                          {formatDate(addDays(endOfNextWeek, 1), "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(This Month)</span>
+                        </h2>
+                      </div>
+                      <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform ml-2" />
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all jobs for this month as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.thisMonth);
+                      }}
+                      title="Mark all jobs for this month as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.thisMonth.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              
+              {/* Next Month's Jobs */}
+              {categorizedJobs.nextMonth && categorizedJobs.nextMonth.length > 0 && (
+                <Collapsible className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center flex-1">
+                      <div className="flex items-center">
+                        {/* Date header status indicator for Next Month */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.nextMonth.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.nextMonth.some((job: any) => 
+                                  job.status === "completed" || job.status === "in_progress" || 
+                                  (Array.isArray(job.servicePoints) && job.servicePoints.some((sp: any) => sp.status === "completed"))
+                                ) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                          className="mr-3"
+                        />
+                        <h2 className="text-xl font-medium">
+                          {formatDate(addDays(endOfThisMonth, 1), "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(Next Month)</span>
+                        </h2>
+                      </div>
+                      <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform ml-2" />
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all jobs for next month as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.nextMonth);
+                      }}
+                      title="Mark all jobs for next month as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.nextMonth.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+              
+              {/* Future Jobs */}
+              {categorizedJobs.future && categorizedJobs.future.length > 0 && (
+                <Collapsible className="rounded-md border mb-4">
+                  <div className="flex justify-between items-center w-full p-4 hover:bg-muted/20">
+                    <CollapsibleTrigger className="flex items-center flex-1">
+                      <div className="flex items-center">
+                        {/* Date header status indicator for Future Jobs */}
+                        <StatusIndicator 
+                          status={
+                            categorizedJobs.future.every((job: any) => job.status === "completed") 
+                              ? "completed" 
+                              : categorizedJobs.future.some((job: any) => 
+                                  job.status === "completed" || job.status === "in_progress" || 
+                                  (Array.isArray(job.servicePoints) && job.servicePoints.some((sp: any) => sp.status === "completed"))
+                                ) 
+                                ? "partially_completed" 
+                                : "pending"
+                          }
+                          size="md"
+                          showLabel={false}
+                          className="mr-3"
+                        />
+                        <h2 className="text-xl font-medium">
+                          {formatDate(addDays(endOfNextMonth, 1), "EEEE, MMMM d")} <span className="text-muted-foreground font-normal">(Future Assignments)</span>
+                        </h2>
+                      </div>
+                      <ChevronDown className="h-5 w-5 text-muted-foreground ui-open:rotate-180 transition-transform ml-2" />
+                    </CollapsibleTrigger>
+                    
+                    {/* Checkmark to mark all future jobs as complete */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        markAllDayJobsComplete(categorizedJobs.future);
+                      }}
+                      title="Mark all future jobs as complete"
+                      className="ml-2 h-8 w-8"
+                    >
+                      <Check className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <CollapsibleContent>
+                    <div className="px-0">
+                      {categorizedJobs.future.map((job: any) => (
+                        <ExpandableJobItem key={job.id} job={job} />
+                      ))}
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+            </div>
+          )}
+          
+          {viewMode === "calendar" && (
+            <div className="calendar-view">
+              <div className="text-xl font-medium mb-4">
+                {formatDate(new Date(), "MMMM yyyy")}
+              </div>
+              
+              <div className="grid grid-cols-7 gap-1 mb-2 text-center">
+                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(day => (
+                  <div key={day} className="p-2 text-sm font-medium">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="grid grid-cols-7 gap-0">
+                {getCalendarData().map((dateInfo, index) => {
+                  const isToday = isSameDay(dateInfo.date, new Date());
+                  return (
+                    <div 
+                      key={index} 
+                      className={`min-h-24 border rounded-none p-0 ${
+                        isToday ? 'bg-primary/10 border-primary' : 
+                        !dateInfo.isCurrentMonth ? 'bg-muted/20 text-muted-foreground' : ''
+                      }`}
+                    >
+                      <div className="text-right text-sm p-0">
+                        {dateInfo.date.getDate()}
+                      </div>
+                      
+                      {dateInfo.jobs.length > 0 && (
+                        <div className="space-y-0">
+                          {dateInfo.jobs.map((job: any) => (
+                            <div 
+                              key={job.id} 
+                              className="flex justify-between items-center text-xs p-0 mb-0 rounded-none cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => {
+                                setSelectedJob(job);
+                                setIsDetailsOpen(true);
+                              }}
+                            >
+                              <div className="truncate pr-1">
+                                {job.customer.name}
+                              </div>
+                              <div className={`h-2 w-2 rounded-full shrink-0 ${
+                                job.status === 'completed' ? 'bg-green-500' : 
+                                job.completedServicePoints > 0 ? 'bg-yellow-500' : 'bg-red-500'
+                              }`}></div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Job Details Dialog */}
+              <Dialog open={isDetailsOpen && selectedJob !== null} onOpenChange={setIsDetailsOpen}>
+                <DialogContent className="sm:max-w-md">
+                  {selectedJob && (
+                    <>
+                      <DialogHeader>
+                        <DialogTitle>{selectedJob.customer.name}</DialogTitle>
+                        <DialogDescription>
+                          {formatDate(selectedJob.date, "EEEE, MMMM d, yyyy")}
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      <div className="py-4 space-y-3">
+                        <div className="flex items-center gap-2 text-sm">
+                          <MapPin className="h-4 w-4 text-muted-foreground" />
+                          <span>{selectedJob.customer.address}</span>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-4 w-4 text-muted-foreground" />
+                          <span>{selectedJob.customer.phone}</span>
+                        </div>
+                        
+                        <div className="flex items-center mt-2">
+                          <Badge className={selectedJob.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
+                            {selectedJob.status === 'completed' ? 'Completed' : 'In Progress'}
+                          </Badge>
+                          <span className="ml-2 text-sm text-muted-foreground">
+                            {selectedJob.completedServicePoints}/{selectedJob.totalServicePoints} service points
+                          </span>
+                        </div>
+                        
+                        {selectedJob.notes && (
+                          <div className="mt-3 p-3 bg-muted/20 rounded text-sm">
+                            <p className="font-medium mb-1">Notes:</p>
+                            <p>{selectedJob.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                      
+                      <div className="flex justify-end gap-2">
+                        <DialogClose asChild>
+                          <Button variant="outline">Close</Button>
+                        </DialogClose>
+                        <Button 
+                          onClick={() => {
+                            // Store job ID before closing dialog
+                            const jobToFind = selectedJob.id;
+                            
+                            // Switch to list view
+                            setViewMode("list");
+                            setIsDetailsOpen(false);
+                            
+                            // Set a longer timeout to ensure the DOM has fully rendered
+                            setTimeout(() => {
+                              // This helps us scroll to the job after view mode changes
+                              const jobElement = document.getElementById(`job-${jobToFind}`);
+                              
+                              if (jobElement) {
+                                // First scroll to the element
+                                jobElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                
+                                // Then try to find and click the expand button with a small delay
+                                setTimeout(() => {
+                                  // Find the collapsible trigger button inside the job element
+                                  const expandButton = jobElement.querySelector('[data-state="closed"]');
+                                  if (expandButton && expandButton instanceof HTMLElement) {
+                                    expandButton.click();
+                                  }
+                                }, 300);
+                              }
+                            }, 500);
+                          }}
+                        >
+                          Go to Job Details
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </DialogContent>
+              </Dialog>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
