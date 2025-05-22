@@ -1,0 +1,30 @@
+Now, please implement the Frontend for Manager Reporting, specifically the 'Completed Jobs History' report. This will allow managers to get an overview of work performed.
+This should involve:
+New Page/Section for Reports (Manager Dashboard):
+Create a new page (e.g., ManagerReports.tsx or similar) accessible from the Manager's sidebar navigation (e.g., under a "Reports" menu item).
+Report Filters:
+On this page, provide UI elements for managers to filter the completed jobs report. The filters we discussed were:
+Date Range: Two date pickers (From Date, To Date).
+Service Staff Member: A dropdown list populated with the service staff managed by the logged-in manager (fetched from an endpoint like GET /api/v1/manager/staff if not already available client-side). Allow an "All Staff" option.
+Customer: A dropdown or searchable select list populated with customers (fetched from GET /api/v1/manager/customers). Allow an "All Customers" option.
+A "Generate Report" or "Apply Filters" button.
+Report Display Area:
+Below the filters, display the report results, ideally in a clear table format.
+When the manager applies the filters, the frontend should make a request to the backend API endpoint: GET /api/v1/manager/reports/completed-jobs using the selected filter values as query parameters (e.g., ?date_from=...&date_to=...&staff_id=...&customer_id=...).
+The table should display key information for each completed job returned by the API, such as:
+Customer Name
+Job Address (or just city for brevity if needed)
+Date of Completion
+Service Staff Member who completed it
+(Optional) A link to view the full job details.
+Handling No Results:
+If the selected filters return no completed jobs, display a user-friendly message (e.g., "No completed jobs found for the selected criteria.").
+Loading State:
+Display a loading indicator while the report data is being fetched from the API.
+This feature will provide managers with valuable insights into completed work and staff performance."
+Key considerations for this implementation:
+Date Pickers: The AI will need to use or implement date picker components for the date range filter.
+Dropdown Population: Fetching and populating the staff and customer dropdowns efficiently.
+API Call Construction: Correctly constructing the API request URL with the selected filter parameters.
+Data Presentation: Ensuring the report table is readable and presents the information clearly.
+This will add another important piece of functionality for the managers, helping them track progress and history.

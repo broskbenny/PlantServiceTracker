@@ -1,0 +1,24 @@
+Now, please implement the iCal feed functionality for Service Staff. This should involve:
+Backend API Endpoint:
+Create or ensure there's an endpoint (e.g., GET /api/v1/staff/calendar.ics).
+This endpoint must be authenticated (only accessible by logged-in service staff).
+When accessed, it should query the database for all assigned jobs for the authenticated service staff member (including jobs generated from recurring patterns).
+It should then format these jobs into a valid iCalendar (.ics) file stream.
+Each calendar event in the .ics file should include:
+A summary/title (e.g., "Plant Service @ [Customer Name]").
+Start and end date/time. (If jobs are only scheduled for a day without specific times, you might make them all-day events or use default start/end times for the workday).
+Location (the customer's address).
+A description (optional, could include a link back to the job in the web app, or key details like overall plant count).
+A unique ID (UID) for each event.
+The response Content-Type header should be text/calendar.
+Frontend Display for Service Staff:
+In the Service Staff's dashboard or a settings area, provide a way for them to easily get their personal iCal feed URL.
+This could be:
+Displaying the full URL (e.g., https://[your-app-url].replit.app/api/v1/staff/calendar.ics).
+A "Copy URL to Clipboard" button.
+Brief instructions on how to add an iCal feed to common calendar applications (like Google Calendar, Outlook, Apple Calendar).
+This feature will allow service staff to integrate their work schedule from this application into their preferred personal calendar tools."
+Considerations for the AI/Implementation:
+iCalendar Libraries: For Node.js, there are libraries like ical-generator or similar that can make constructing the .ics file much easier and less error-prone than manually formatting the string. The AI might choose to use one.
+Date/Time Handling: Pay attention to timezones if your service staff or customers might be in different ones, though for an initial version, assuming a single timezone might be simpler.
+Security of the iCal URL: Since the endpoint itself will be authenticated when accessed by the app, if the URL is simply given to the user, it implies the calendar app will access it without the JWT token. A common pattern is to include a long, unique, hard-to-guess "secret token" within the iCal URL itself that the backend can validate specifically for iCal requests for that user. This avoids exposing the main session token. For V1, if the AI implements the main /api/v1/staff/calendar.ics to require the standard JWT, the staff member would have to manually download the .ics file periodically through the app rather than subscribing directly, or the AI needs to implement a token-in-URL strategy for true subscription. Clarifying the subscription mechanism will be important. For simplicity, the AI might initially just make it a downloadable file via an authenticated GET request.

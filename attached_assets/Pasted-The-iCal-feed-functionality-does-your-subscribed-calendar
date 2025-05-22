@@ -1,0 +1,37 @@
+The iCal feed functionality – does your subscribed calendar update after a refresh/sync?
+**Once you're satisfied with the iCal functionality is a great addition for the service staff!
+Now, please implement the 'Items Requiring Attention' view for Managers and understand its security model, you can decide on the next feature.
+The main V1 feature remaining from our core.** This feature is crucial for closing the communication loop when staff report issues or flag messages. This should include:
+list is the "Items Requiring Attention" View for Managers.
+If you're ready to proceed after Backend API Endpoint:
+* Ensure there's an endpoint (e.g., `GET /api clarifying/testing iCal, your next instruction to the AI would be:
+"The iCal feed implementation looks great./v1/manager/attention-items) that allows managers to fetchMessageLog` entries.
+* Thank you for clarifying [mention any clarifications you sought, or skip if you tested and it's clear].
+Now,This endpoint should filter messages where notify_management is true.
+* It should allow filtering by status (e.g., ?status=pending to get unacknowledged items, or ?status=acknowledged to please implement the 'Items Requiring Attention' view for Managers. This feature is crucial for closing the communication loop with Service see resolved items).
+* The response should include details like the message text, who authored it, when it was created, Staff.
+This should involve:
+Backend API Endpoint:
+Create or ensure an endpoint (e.g., GET /api/v1/manager/attention-items) that is accessible only by authenticated and context (e.g., related customer/job ID or name).
+Ensure there's an Managers.
+This endpoint should query the MessageLog table for entries where notify_management endpoint for a manager to acknowledge an attention item (e.g., POST /api/v1/manager/attention-items/{message_id}/acknowledge), which would update its status.
+**Frontend View is true.
+It should allow filtering by status (e.g., ?status=pending for Managers (AttentionItemsPage.tsx or similar):**
+Create a new page/section in to get unacknowledged items, or ?status=acknowledged for a history). By default, it should probably the Manager's dashboard titled "Items Requiring Attention" or "Actionable Deviations."
+This show pending items.
+The response should include details for each item: the message text, who sent it ( page should fetch and display a list of pending attention items from the API.
+For each item in the list, displayauthor user details), when it was sent, what job/customer/group/service point it relates to (with enough:
+The message text.
+The name of the Service Staff member who reported it.
+The date/time it was reported.
+Link or clear reference to the related Job/Customer. context for the manager to understand), and its current acknowledgment status.
+Ensure there's an endpoint (e.g., POST /api/v1/manager/attention-items/{message_id}/acknowledge)
+Provide an "Acknowledge" button for each item. Clicking this should call the backend API to for a manager to mark an item as acknowledged. This should update the MessageLog entry (e.g., set deviation_acknowledged_at and deviation_acknowledged_by_user_id).
+** mark the item as acknowledged and then refresh the list or remove the item from the pending view.
+ConsiderFrontend View for Managers (AttentionItemsPage.tsx or similar):**
+Create a new page/ adding a way to view "Acknowledged Items" as well, perhaps as a separate tab or filter.
+Ensuresection in the Manager's dashboard accessible from the sidebar navigation.
+This page will display a list of the this page is added to the Manager's navigation/sidebar.
+This will provide managers with a clear, actionable list "pending" attention items fetched from the API.
+* For each item in the list, display:
+* of issues or important notes flagged by their team in the field."

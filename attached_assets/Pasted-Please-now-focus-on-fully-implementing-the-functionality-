@@ -1,0 +1,30 @@
+Please now focus on fully implementing the functionality within the RecurringPatterns.tsx and RecurringPatternForm.tsx components for Managers. This should include:
+In RecurringPatterns.tsx (List View):
+Fetch and display a list of all existing recurring job patterns from the backend API (GET /api/recurring-patterns).
+For each pattern in the list, display key information (e.g., frequency, customer/template job name, start date).
+Provide an "Edit" button/link for each pattern that navigates to the RecurringPatternForm.tsx pre-filled with that pattern's data.
+Provide a "Delete" button for each pattern (with a confirmation dialog) that calls the appropriate backend API endpoint (DELETE /api/recurring-patterns/{pattern_id}).
+A "Create New Pattern" button that navigates to an empty RecurringPatternForm.tsx.
+An option or button next to each pattern to "Generate Job Instances" (e.g., a modal asking "How many occurrences?" or "Up to what date?") which then calls the POST /api/recurring-patterns/{pattern_id}/generate-jobs endpoint.
+An option to "Preview Job Dates" for a pattern (GET /api/recurring-patterns/{pattern_id}/preview-dates).
+In RecurringPatternForm.tsx (Create/Edit Form):
+If editing, fetch the specific recurring pattern's details (GET /api/recurring-patterns/{pattern_id}) to pre-fill the form.
+Provide form fields for all necessary recurring pattern attributes:
+Frequency (daily, weekly, bi-weekly, monthly, custom).
+Interval (if custom).
+Days of the week/month (as applicable).
+Start date.
+End condition (number of occurrences, specific end date, or never ends).
+Crucially, allow the manager to define the 'template job' details associated with this recurring pattern. This means including fields for:
+Selecting the Customer.
+Assigning a default Service Staff member (optional).
+Defining the overall plant/pot count.
+Setting up the hierarchy of Groups (optional) and Service Points (with optional plant type, pot type) for the template job. (This might be a complex part of the form, perhaps reusing components from the one-time job creation form if possible).
+On submit, call the appropriate backend API endpoint (POST /api/recurring-patterns for create, PUT /api/recurring-patterns/{pattern_id} for update).
+Handle API responses (success/error messages).
+Please ensure these components are user-friendly and effectively communicate with the backend API endpoints we've already established for recurring patterns."
+Key things to watch out for during this implementation:
+Template Job Definition: This is the most complex part of the RecurringPatternForm. How does the manager define what kind of job is recurring? The form needs to capture all the details of the job that will be repeated.
+State Management in React: How the data is fetched, stored, and updated within these React components.
+Error Handling: Clear feedback to the user if API calls fail.
+This will be a significant chunk of frontend work, but it's essential for making the recurring job feature usable by managers.

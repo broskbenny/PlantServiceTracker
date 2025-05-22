@@ -1,0 +1,22 @@
+Now that the backend API for recurring jobs is implemented and tested, please update the Manager's frontend interface to allow them to:
+Create new recurring job patterns (with a form for frequency, interval, days, start/end conditions, and the template job details like customer, default staff, groups, service points).
+View a list of existing recurring job patterns.
+Edit existing recurring job patterns.
+Delete recurring job patterns.
+Trigger the generation of job instances from a selected recurring pattern (e.g., "Generate next 3 months of jobs").
+Ensure that when viewing the job calendar or lists, jobs generated from recurring patterns are displayed correctly and are identifiable as part of a series."
+Review Job Generation Logic:
+While the AI has implemented job generation, it would be good to understand when and how these jobs are generated.
+Is it on-demand when a manager clicks a button?
+Is there any automated process (e.g., a scheduled task that runs daily/weekly to generate upcoming jobs)? For V1, on-demand is fine, but good to clarify.
+Follow-up question for the AI (after frontend work): "Regarding the generation of job instances from recurring patterns:
+How are the details of the 'template job' (customer, groups, service points, default assigned staff) associated with a recurring pattern and used when generating new instances?
+Can a manager specify a 'template job' when creating a recurring pattern through the UI?"
+iCal Feed:
+Once the job generation (including recurring) is solid and visible in the UI, this would be a good time to tackle the iCal feed for service staff.
+Instruction for AI: "Please implement the iCal feed functionality for Service Staff. This should be an endpoint (e.g., /api/v1/staff/calendar.ics) that, when accessed with proper authentication, returns an iCalendar file of the staff member's assigned jobs, including those generated from recurring patterns."
+"Items Requiring Attention" View:
+The messaging system is in place. The next step is the manager's view for flagged messages.
+Instruction for AI: "Please create the 'Items Requiring Attention' view for Managers. This view should list all messages from Service Staff that were flagged with 'Notify Management' and have not yet been acknowledged. Managers should be able to see the message details, who sent it, which job/customer it relates to, and an option to 'Acknowledge' the item (which would then remove it from this active list or mark it as handled)."
+Testing on the Frontend:
+The AI used curl for backend API testing, which is great. Now, all these new features need to be thoroughly tested through the actual web interface by you (logging in as a manager, creating customers, creating recurring jobs, generating instances, then logging in as staff to see them).
